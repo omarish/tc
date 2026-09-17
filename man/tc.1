@@ -1,0 +1,62 @@
+.TH TC 1 "September 2026" "tc" "User Commands"
+.SH NAME
+tc \- count tokens (like wc, for tokens)
+.SH SYNOPSIS
+.B tc
+[\fIfile\fR ...]
+.br
+.B tc
+[\fB\-h\fR | \fB\-\-help\fR]
+.br
+.B tc
+[\fB\-v\fR | \fB\-\-version\fR]
+.SH DESCRIPTION
+.B tc
+counts tokens in files or standard input using OpenAI's
+.B o200k_base
+encoding (the encoding used by GPT\-4o and related models).
+.PP
+With no files,
+.B tc
+reads standard input and prints the token count.
+With one or more files, it prints the count and filename for each;
+with more than one file, it also prints a total.
+.PP
+Behavior mirrors
+.BR wc (1):
+unreadable files produce an error on stderr, other files continue, and
+the exit status is non\-zero if any file failed.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Print usage and exit 0.
+.TP
+.BR \-v ", " \-\-version
+Print version
+.RB ( "tc <version>" )
+and exit 0.
+.SH EXAMPLES
+.TP
+Count tokens from stdin:
+.B echo \-n "hello" | tc
+.TP
+Count tokens in one file:
+.B tc README.md
+.TP
+Count tokens in multiple files (with total):
+.B tc a.txt b.txt
+.TP
+Pipe a file:
+.B cat notes.txt | tc
+.SH ENCODING
+v1 always uses
+.BR o200k_base .
+A future
+.B \-e
+/
+.B \-\-encoding
+flag may select other encodings.
+.SH SEE ALSO
+.BR wc (1)
+.SH AUTHOR
+Omar

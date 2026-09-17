@@ -96,6 +96,32 @@ func TestRunHelp(t *testing.T) {
 		if !strings.Contains(out.String(), "Usage: tc") {
 			t.Fatalf("%s: stdout missing usage: %q", arg, out.String())
 		}
+		if !strings.Contains(out.String(), "-v") {
+			t.Fatalf("%s: stdout should mention -v: %q", arg, out.String())
+		}
+		if errBuf.Len() != 0 {
+			t.Fatalf("%s: unexpected stderr %q", arg, errBuf.String())
+		}
+	}
+}
+
+func TestRunVersion(t *testing.T) {
+	for _, arg := range []string{"-v", "--version"} {
+		var out, errBuf bytes.Buffer
+		code := run([]string{arg}, strings.NewReader(""), &out, &errBuf)
+		if code != 0 {
+			t.Fatalf("%s: exit %d, stderr %q", arg, code, errBuf.String())
+		}
+		got := out.String()
+		if !strings.HasPrefix(got, "tc ") {
+			t.Fatalf("%s: stdout = %q, want prefix %q", arg, got, "tc ")
+		}
+		if !strings.Contains(got, version) {
+			t.Fatalf("%s: stdout = %q, want to contain version %q", arg, got, version)
+		}
+		if !strings.HasSuffix(got, "\n") {
+			t.Fatalf("%s: stdout missing trailing newline: %q", arg, got)
+		}
 		if errBuf.Len() != 0 {
 			t.Fatalf("%s: unexpected stderr %q", arg, errBuf.String())
 		}

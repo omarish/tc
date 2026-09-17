@@ -8,20 +8,33 @@ import (
 	"strings"
 )
 
+// version is set at link time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 const usage = `Usage: tc [file ...]
-       tc -h
+       tc -h | --help
+       tc -v | --version
 
-Count tokens using OpenAI o200k_base (GPT-4o and related models).
+Like wc, but for tokens. Count tokens using OpenAI o200k_base
+(GPT-4o and related models).
+
 With no files, read standard input and print the token count.
 With one or more files, print the count and filename for each;
 with more than one file, also print a total.
 
 Options:
-  -h, --help   show this help
+  -h, --help      show this help
+  -v, --version   print version and exit
+
+Examples:
+  echo -n "hello" | tc
+  tc README.md
+  tc a.txt b.txt
+  cat notes.txt | tc
 
 Encoding is always o200k_base in v1. A future -e/--encoding flag may
 select other encodings; for now there are no counting options.
@@ -29,13 +42,17 @@ select other encodings; for now there are no counting options.
 
 // run implements the wc-like CLI. It is separated from main for testing.
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	files, help, err := parseArgs(args)
+	files, help, showVersion, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(stderr, "tc: %v\n", err)
 		return 1
 	}
 	if help {
 		fmt.Fprint(stdout, usage)
+		return 0
+	}
+	if showVersion {
+		fmt.Fprintf(stdout, "tc %s\n", version)
 		return 0
 	}
 
@@ -73,23 +90,27 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 // parseArgs splits CLI args into file paths.
-// -h / --help requests usage. -- ends option parsing.
+// -h / --help requests usage. -v / --version requests version.
+// -- ends option parsing.
 // Any other dash-led token is an error (so typos are not treated as filenames).
-func parseArgs(args []string) (files []string, help bool, err error) {
+func parseArgs(args []string) (files []string, help, showVersion bool, err error) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if a == "--" {
-			return append(files, args[i+1:]...), false, nil
+			return append(files, args[i+1:]...), false, false, nil
 		}
 		if a == "-h" || a == "--help" {
-			return nil, true, nil
+			return nil, true, false, nil
+		}
+		if a == "-v" || a == "--version" {
+			return nil, false, true, nil
 		}
 		if strings.HasPrefix(a, "-") && a != "-" {
-			return nil, false, fmt.Errorf("unknown option %s\nTry 'tc -h' for help.", a)
+			return nil, false, false, fmt.Errorf("unknown option %s\nTry 'tc -h' for help.", a)
 		}
 		files = append(files, a)
 	}
-	return files, false, nil
+	return files, false, false, nil
 }
 
 func errString(err error) string {

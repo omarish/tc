@@ -19,9 +19,11 @@ jobs:
         run: go test ./...
 
       - name: Build
-        run: go build -o tc .
+        run: go build -ldflags "-X main.version=dev" -o tc .
 
       - name: Smoke
         run: |
           echo -n hello | ./tc | grep -qx 1
           ./tc -h | grep -q 'Usage: tc'
+          ./tc -v | grep -q 'tc '
+          ./tc --version | grep -qx 'tc dev'
