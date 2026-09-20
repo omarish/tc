@@ -224,34 +224,6 @@ pip install tiktoken
 python scripts/gen_expected.py --check     # what CI does
 ```
 
-### Known upstream limitation
-
-Three corpus cases are skipped, and the skips are tripwires that fail if the
-cases start passing. `tiktoken-go` ships a code-generated regexp2 engine for
-the `o200k_base` split pattern, and that engine mishandles the `\s*[\r\n]+`
-alternative: a **blank line containing whitespace** splits into two pieces
-where the reference tokenizer produces one.
-
-```
-input        reference   here
-"a\n \nb"            3      4
-"a\n\t\nb"           3      4
-```
-
-It costs one extra token per whitespace-only blank line, so it compounds on
-text that has many of them. Ordinary blank lines, CRLF line endings, trailing
-spaces and markdown hard breaks are all unaffected — none of the 35 real files
-in these two repos hits it.
-
-The bug is in the generated engine, not the pattern: interpreting the identical
-pattern with `regexp2` directly gives the correct split. It is present in every
-`tiktoken-go` release through v0.8.1. `pkoukk/tiktoken-go` (with its offline
-loader, so still no network calls) tokenizes all three cases correctly and is
-the likely fix.
-
-To add a case, append it to `corpus.json` (`text` for readable input, `hex` for
-raw bytes) and rerun the generator.
-
 ## Encoding
 
 - **v1:** always `o200k_base`. Options: `-h` / `--help`, `-v` / `--version`,
@@ -260,7 +232,8 @@ raw bytes) and rerun the generator.
 
 No network calls at runtime, no config files, no model APIs. The tokenizer
 vocabulary is embedded in the binary via
-[`github.com/tiktoken-go/tokenizer`](https://github.com/tiktoken-go/tokenizer).
+[`github.com/pkoukk/tiktoken-go`](https://github.com/pkoukk/tiktoken-go),
+with its offline loader so the vocabulary is embedded rather than downloaded.
 
 ## License
 

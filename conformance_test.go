@@ -112,9 +112,6 @@ func TestConformanceTokenCounts(t *testing.T) {
 			if err != nil {
 				t.Fatalf("countTokens: %v", err)
 			}
-			if skipKnownBug(t, c.Name, n == want.Tokens) {
-				return
-			}
 			if n != want.Tokens {
 				t.Errorf("tokens = %d, want %d (%s)", n, want.Tokens, c.Note)
 			}
@@ -139,9 +136,6 @@ func TestConformanceViaCLI(t *testing.T) {
 			if err != nil {
 				t.Fatalf("countFile: %v", err)
 			}
-			if skipKnownBug(t, c.Name, n == want.Tokens) {
-				return
-			}
 			if n != want.Tokens {
 				t.Errorf("tokens = %d, want %d (%s)", n, want.Tokens, c.Note)
 			}
@@ -150,75 +144,4 @@ func TestConformanceViaCLI(t *testing.T) {
 			}
 		})
 	}
-}
-
-// knownUpstreamBugs lists corpus cases where the Go tokenizer library disagrees
-// with the reference implementation through no fault of this tool.
-//
-// tiktoken-go ships a code-generated regexp2 engine (codec/regexp.gen.go) for
-// the o200k_base split pattern, and that engine mishandles the `\s*[\r\n]+`
-// alternative: a blank line that contains whitespace splits into two pieces
-// where the reference produces one. The bug is in the generated engine, not in
-// the pattern -- interpreting the identical pattern with regexp2 directly gives
-// the correct split -- and it is present in every release through v0.8.1.
-//
-// Each entry is a tripwire, not just a skip: if a case starts agreeing, the
-// test fails and tells you to delete the entry.
-var knownUpstreamBugs = map[string]string{
-	"blank-line-with-space":      `"\n \n" splits as "\n" + " \n"`,
-	"blank-line-with-tab":        `"\n\t\n" splits as "\n" + "\t\n"`,
-	"blank-lines-whitespace-run": "one extra token per whitespace-only blank line",
-}
-
-// skipKnownBug reports whether name is a known upstream failure, skipping the
-// test if so. It fails the test when a known-bad case starts passing, so the
-// list above cannot quietly go stale.
-func skipKnownBug(t *testing.T, name string, agrees bool) bool {
-	reason, known := knownUpstreamBugs[name]
-	if !known {
-		return false
-	}
-	if agrees {
-		t.Fatalf("case %q now agrees with the reference tokenizer; "+
-			"remove it from knownUpstreamBugs", name)
-	}
-	t.Skipf("known upstream tiktoken-go bug: %s", reason)
-	return true
-}
-
-// TestUpstreamWhitespaceSplitBug documents the bug above with its minimal
-// reproducer, independently of the corpus. Delete it together with
-// knownUpstreamBugs once the dependency is fixed or replaced.
-func TestUpstreamWhitespaceSplitBug(t *testing.T) {
-	// The reference tokenizer emits a single token (id 47812) for "\n \n",
-	// because `\s*[\r\n]+` matches the whole run.
-	const input = "\n \n"
-	ids, err := encodeIDs(input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(ids) == 1 {
-		t.Fatalf("tiktoken-go now returns %v for %q; the upstream bug is fixed, "+
-			"so delete this test and knownUpstreamBugs", ids, input)
-	}
-	if len(ids) != 2 {
-		t.Fatalf("unexpected token count %d for %q: %v", len(ids), input, ids)
-	}
-}
-
-// encodeIDs exposes token IDs for tests; tc itself only needs the count.
-func encodeIDs(text string) ([]int, error) {
-	enc, err := encoding()
-	if err != nil {
-		return nil, err
-	}
-	uids, _, err := enc.Encode(text)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int, len(uids))
-	for i, u := range uids {
-		ids[i] = int(u)
-	}
-	return ids, nil
 }
