@@ -16,3 +16,15 @@ Ergonomics landed:
 - Shell completions (bash / zsh / fish).
 - Release assets: raw binaries + `tc_<ver>_<os>_<arch>.tar.gz`/`.zip` + `SHA256SUMS`.
 - README: Homebrew tap `omarish/tap/tc`, checksums, man, completions.
+
+Unicode correctness (v0.2.0):
+
+- Input is decoded with the WHATWG maximal-subpart rule, so invalid UTF-8
+  produces one U+FFFD per invalid *sequence*, matching Python's
+  `bytes.decode(errors="replace")` and therefore the reference tiktoken.
+  Substituting per byte disagreed on truncated multi-byte sequences.
+- Invalid input warns on stderr and still counts on stdout; `--strict` rejects
+  it instead. Warnings never touch stdout, so pipelines are unaffected.
+- Conformance corpus in `testdata/`, generated from real tiktoken by
+  `scripts/gen_expected.py`. `go test` runs offline against the committed
+  golden; CI reruns the generator with `--check` to catch drift.

@@ -7,7 +7,7 @@ _tc() {
 
   case "${cur}" in
     -*)
-      COMPREPLY=( $(compgen -W "-h --help -v --version" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "-h --help -v --version --strict" -- "${cur}") )
       return 0
       ;;
   esac

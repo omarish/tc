@@ -27,3 +27,41 @@ jobs:
           ./tc -h | grep -q 'Usage: tc'
           ./tc -v | grep -q 'tc '
           ./tc --version | grep -qx 'tc dev'
+
+      - name: Smoke - invalid UTF-8 warns but still counts
+        run: |
+          set -euo pipefail
+          printf 'ok \xf0\x9f\x91' > bad.txt
+          # count on stdout, warning on stderr, exit 0
+          test "$(./tc bad.txt 2>/dev/null)" = "2 bad.txt"
+          ./tc bad.txt 2>&1 >/dev/null | grep -q 'not valid UTF-8'
+          # --strict rejects it
+          if ./tc --strict bad.txt; then echo "--strict should have failed"; exit 1; fi
+
+  # Verifies the committed testdata/expected.json still matches what the real
+  # OpenAI tokenizer says. This is the job that catches tiktoken changing under
+  # us, or someone hand-editing the golden file.
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install reference tokenizer
+        run: pip install --quiet tiktoken
+
+      - name: Reference tokenizer version
+        run: python -c "import tiktoken; print('tiktoken', tiktoken.__version__)"
+
+      - name: Golden file still matches tiktoken
+        run: python scripts/gen_expected.py --check
+
+      - name: tc matches the golden file
+        run: go test -run TestConformance -v ./...

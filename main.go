@@ -15,7 +15,7 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-const usage = `Usage: tc [file ...]
+const usage = `Usage: tc [options] [file ...]
        tc -h | --help
        tc -v | --version
 
@@ -29,38 +29,61 @@ with more than one file, also print a total.
 Options:
   -h, --help      show this help
   -v, --version   print version and exit
+      --strict    fail on input that is not valid UTF-8
+
+Input must be UTF-8. Input that is not valid UTF-8 is counted the way an
+API client would send it: each maximal invalid byte sequence becomes one
+U+FFFD. tc warns on stderr when this happens; stdout is unaffected, so
+pipelines keep working. Use --strict to reject such input instead.
 
 Examples:
   echo -n "hello" | tc
   tc README.md
   tc a.txt b.txt
   cat notes.txt | tc
+  tc --strict *.md
 
 Encoding is always o200k_base in v1. A future -e/--encoding flag may
 select other encodings; for now there are no counting options.
 `
 
+// stdinName is how standard input is named in diagnostics.
+const stdinName = "(standard input)"
+
+type options struct {
+	files   []string
+	help    bool
+	version bool
+	strict  bool
+}
+
 // run implements the wc-like CLI. It is separated from main for testing.
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	files, help, showVersion, err := parseArgs(args)
+	opts, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(stderr, "tc: %v\n", err)
 		return 1
 	}
-	if help {
+	if opts.help {
 		fmt.Fprint(stdout, usage)
 		return 0
 	}
-	if showVersion {
+	if opts.version {
 		fmt.Fprintf(stdout, "tc %s\n", version)
 		return 0
 	}
 
-	if len(files) == 0 {
-		n, err := countReader(stdin)
+	if len(opts.files) == 0 {
+		n, valid, err := countReader(stdin)
 		if err != nil {
 			fmt.Fprintf(stderr, "tc: %v\n", err)
 			return 1
+		}
+		if !valid {
+			reportInvalid(stderr, stdinName, opts.strict)
+			if opts.strict {
+				return 1
+			}
 		}
 		fmt.Fprintf(stdout, "%d\n", n)
 		return 0
@@ -68,18 +91,25 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	var total int
 	var failed bool
-	for _, name := range files {
-		n, err := countFile(name)
+	for _, name := range opts.files {
+		n, valid, err := countFile(name)
 		if err != nil {
 			fmt.Fprintf(stderr, "tc: %s: %s\n", name, errString(err))
 			failed = true
 			continue
 		}
+		if !valid {
+			reportInvalid(stderr, name, opts.strict)
+			if opts.strict {
+				failed = true
+				continue
+			}
+		}
 		fmt.Fprintf(stdout, "%d %s\n", n, name)
 		total += n
 	}
 
-	if len(files) > 1 {
+	if len(opts.files) > 1 {
 		fmt.Fprintf(stdout, "%d total\n", total)
 	}
 
@@ -89,28 +119,48 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// parseArgs splits CLI args into file paths.
+// reportInvalid writes the diagnostic for input that is not valid UTF-8.
+// Under --strict it is an error; otherwise it is a warning and counting
+// proceeds with U+FFFD substitution.
+func reportInvalid(stderr io.Writer, name string, strict bool) {
+	if strict {
+		fmt.Fprintf(stderr, "tc: %s: not valid UTF-8\n", name)
+		return
+	}
+	fmt.Fprintf(stderr, "tc: warning: %s: not valid UTF-8; counted with U+FFFD substitution\n", name)
+}
+
+// parseArgs splits CLI args into options and file paths.
 // -h / --help requests usage. -v / --version requests version.
+// --strict rejects input that is not valid UTF-8.
 // -- ends option parsing.
 // Any other dash-led token is an error (so typos are not treated as filenames).
-func parseArgs(args []string) (files []string, help, showVersion bool, err error) {
+func parseArgs(args []string) (options, error) {
+	var opts options
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if a == "--" {
-			return append(files, args[i+1:]...), false, false, nil
+			opts.files = append(opts.files, args[i+1:]...)
+			return opts, nil
 		}
 		if a == "-h" || a == "--help" {
-			return nil, true, false, nil
+			opts.help = true
+			return opts, nil
 		}
 		if a == "-v" || a == "--version" {
-			return nil, false, true, nil
+			opts.version = true
+			return opts, nil
+		}
+		if a == "--strict" {
+			opts.strict = true
+			continue
 		}
 		if strings.HasPrefix(a, "-") && a != "-" {
-			return nil, false, false, fmt.Errorf("unknown option %s\nTry 'tc -h' for help.", a)
+			return options{}, fmt.Errorf("unknown option %s\nTry 'tc -h' for help.", a)
 		}
-		files = append(files, a)
+		opts.files = append(opts.files, a)
 	}
-	return files, false, false, nil
+	return opts, nil
 }
 
 func errString(err error) string {
@@ -120,19 +170,22 @@ func errString(err error) string {
 	return err.Error()
 }
 
-func countFile(name string) (int, error) {
+func countFile(name string) (n int, valid bool, err error) {
 	f, err := os.Open(name)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	defer f.Close()
 	return countReader(f)
 }
 
-func countReader(r io.Reader) (int, error) {
+// countReader counts tokens in r, reporting whether the input was valid UTF-8.
+func countReader(r io.Reader) (n int, valid bool, err error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
-	return countTokens(string(data))
+	text, valid := decodeUTF8(data)
+	n, err = countTokens(text)
+	return n, valid, err
 }

@@ -3,7 +3,7 @@
 tc \- count tokens (like wc, for tokens)
 .SH SYNOPSIS
 .B tc
-[\fIfile\fR ...]
+[\fB\-\-strict\fR] [\fIfile\fR ...]
 .br
 .B tc
 [\fB\-h\fR | \fB\-\-help\fR]
@@ -35,6 +35,28 @@ Print usage and exit 0.
 Print version
 .RB ( "tc <version>" )
 and exit 0.
+.TP
+.B \-\-strict
+Treat input that is not valid UTF\-8 as an error instead of a warning.
+The offending input is not counted and the exit status is non\-zero.
+.SH ENCODING OF INPUT
+Input is expected to be UTF\-8.
+.PP
+Input that is not valid UTF\-8 is still counted, using the same substitution
+an API client would apply on the way out: each maximal invalid byte sequence
+becomes a single U+FFFD REPLACEMENT CHARACTER. This is the WHATWG rule, and it
+matches Python's
+.BR "bytes.decode(errors=\(dqreplace\(dq)" ,
+so the count agrees with the reference
+.B tiktoken
+implementation rather than with a naive per\-byte substitution.
+.PP
+When this happens
+.B tc
+writes a warning to stderr and the count still goes to stdout, so pipelines are
+unaffected. Use
+.B \-\-strict
+to reject such input instead.
 .SH EXAMPLES
 .TP
 Count tokens from stdin:
@@ -48,6 +70,9 @@ Count tokens in multiple files (with total):
 .TP
 Pipe a file:
 .B cat notes.txt | tc
+.TP
+Fail rather than guess at non\-UTF\-8 input:
+.B tc \-\-strict *.md
 .SH ENCODING
 v1 always uses
 .BR o200k_base .
